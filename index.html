@@ -3,51 +3,86 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; connect-src 'self' https://esm.sh wss://relay.primal.net wss://nos.lol; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; object-src 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; connect-src 'self' https: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; object-src 'none';">
   <title>root — ETERNETS Cloud</title>
   <script type="module">
     import { schnorr, secp256k1 } from 'https://esm.sh/@noble/curves@1.6.0/secp256k1';
+    import { nip19 } from 'https://esm.sh/nostr-tools@2.7.2/nip19';
+    import QRCode from 'https://esm.sh/qrcode@1.5.3';
+    import { ethers } from 'https://esm.sh/ethers@6.13.4';
     window.schnorr = schnorr; window.secp256k1 = secp256k1;
 
-    // ─── Constants ──────────────────────────────────────────
     const RELAYS = ['wss://relay.primal.net', 'wss://nos.lol'];
     const K = { TRANSFER: 30000, LICENSE: 30001, LEAD: 30002, CONFIG: 30004 };
+    const PRICE_API = 'https://mempool.space/api/v1/prices';
 
-    // ROOT OF TRUST
-    // Only events signed by this pubkey (encoded below as a truncated
-    // hex-derived identifier, NOT a standards-compliant bech32 npub) are
-    // treated as authoritative configuration. To provision a real deployment:
-    //   1. Open the console on a device you control and run: await window.newKey()
-    //   2. Copy the printed identifier
-    //   3. Replace ADMIN_NPUB below with that value and redeploy this file
-    // Anyone who has NOT done this will see "not verified" until a correctly
-    // signed CONFIG event from this key reaches the relays.
-    const ADMIN_NPUB = 'npub1root'; // placeholder — replace before production use
+    const CATFISH_RPC_URL = '';
+    const CATFISH_CONTRACT = '';
+    const CATFISH_ABI = [
+      'function balanceOf(address) view returns (uint256)',
+      'function transfer(address to, uint256 amount) returns (bool)',
+      'function decimals() view returns (uint8)'
+    ];
+    let catfishProvider = null, catfishContract = null, catfishDecimals = 18;
+    const onChainMode = () => !!(CATFISH_RPC_URL && CATFISH_CONTRACT);
+
+    function skToEthWallet(skBytes, provider) {
+      return new ethers.Wallet('0x' + toHex(skBytes), provider);
+    }
+
+    async function initCatfish() {
+      if (!onChainMode()) return;
+      try {
+        catfishProvider = new ethers.JsonRpcProvider(CATFISH_RPC_URL);
+        catfishContract = new ethers.Contract(CATFISH_CONTRACT, CATFISH_ABI, catfishProvider);
+        catfishDecimals = await catfishContract.decimals();
+        log('On-chain CTF ledger active (CatFish.sol).', 'ok');
+      } catch (e) {
+        catfishProvider = null; catfishContract = null;
+        log('Could not reach CatFish contract, falling back to event-based balance: ' + e.message, 'err');
+      }
+    }
+
+    async function refreshOnChainBalance() {
+      if (!catfishContract) return;
+      const wallet = skToEthWallet(sk, catfishProvider);
+      const raw = await catfishContract.balanceOf(wallet.address);
+      balance.ctf = Number(ethers.formatUnits(raw, catfishDecimals));
+      updateUI();
+    }
+
+    const SINGULARITY_GATEWAY = '';
+    function gatewayFetch(url, opts) {
+      if (SINGULARITY_GATEWAY) return fetch(SINGULARITY_GATEWAY + '/proxy?url=' + encodeURIComponent(url), opts);
+      return fetch(url, opts);
+    }
+
+    const ADMIN_NPUB = 'npub1replace0000000000000000000000000000000000000000000000000';
+    let adminPkHex = null;
+    try { adminPkHex = nip19.decode(ADMIN_NPUB).data; } catch (_) { adminPkHex = null; }
 
     let sk = null, pk = null, npub = '';
     let wsList = [];
     let balance = { ctf: 0, hcr: 0 };
     let lightningAddress = 'not set';
     let adminVerified = false;
-    const seenEventIds = new Set(); // replay / duplicate-count protection
+    const seenEventIds = new Set();
+    let invoicePoll = null;
 
-    // ─── Encoding utils ─────────────────────────────────────
     function toHex(b) { return Array.from(b).map(x => x.toString(16).padStart(2, '0')).join(''); }
     function fromHex(s) { return new Uint8Array(s.match(/.{2}/g).map(x => parseInt(x, 16))); }
-    function toNpub(pkHex) { return 'npub1' + pkHex.slice(0, 40); }
-    function isAdminPubkey(pkHex) { return toNpub(pkHex) === ADMIN_NPUB; }
+    function pubkeyToNpub(pkHex) { return nip19.npubEncode(pkHex); }
+    function isAdminPubkey(pkHex) { return !!adminPkHex && pkHex === adminPkHex; }
 
     function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-      }[c]));
+      return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
     function log(msg, type = 'info') {
       const el = document.getElementById('log');
       const d = document.createElement('div');
       d.className = 'l-' + type;
-      d.textContent = msg; // textContent only — never innerHTML for log lines
+      d.textContent = msg;
       el.appendChild(d);
       el.scrollTop = el.scrollHeight;
     }
@@ -58,23 +93,10 @@
       document.getElementById('balHcr').textContent = balance.hcr;
     }
 
-    // ─── Key storage (optional passphrase encryption) ───────
-    // Plaintext keys in localStorage are readable by any script that runs in
-    // this origin (e.g. via a future XSS bug or a malicious dependency), so
-    // an optional passphrase-derived AES-GCM wrapper is offered. This raises
-    // the cost of key theft but is not a substitute for a hardware signer or
-    // a browser extension with proper key isolation — treat this as a hot
-    // wallet for small amounts only.
     async function deriveAesKey(passphrase, salt) {
-      const baseKey = await crypto.subtle.importKey(
-        'raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']
-      );
-      return crypto.subtle.deriveKey(
-        { name: 'PBKDF2', salt, iterations: 210000, hash: 'SHA-256' },
-        baseKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
-      );
+      const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+      return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 210000, hash: 'SHA-256' }, baseKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
     }
-
     async function encryptSecret(skBytes, passphrase) {
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -82,20 +104,17 @@
       const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, skBytes);
       return { salt: toHex(salt), iv: toHex(iv), ct: toHex(new Uint8Array(ct)) };
     }
-
     async function decryptSecret(blob, passphrase) {
       const key = await deriveAesKey(passphrase, fromHex(blob.salt));
-      const pt = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: fromHex(blob.iv) }, key, fromHex(blob.ct)
-      );
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromHex(blob.iv) }, key, fromHex(blob.ct));
       return new Uint8Array(pt);
     }
 
     async function newKey() {
       const skBytes = secp256k1.utils.randomPrivateKey();
-      const usePass = confirm('Protect this key with a passphrase? (Recommended. Cancel to store it unencrypted on this device.)');
+      const usePass = confirm('Protect this key with a passphrase? (Recommended. Cancel to store unencrypted.)');
       if (usePass) {
-        const pass = prompt('Enter a passphrase (you will need it every time this page loads):');
+        const pass = prompt('Enter a passphrase (required every time this page loads):');
         if (pass) {
           const blob = await encryptSecret(skBytes, pass);
           localStorage.setItem('root_sk_enc', JSON.stringify(blob));
@@ -110,9 +129,9 @@
       }
       sk = skBytes;
       pk = schnorr.getPublicKey(sk);
-      npub = toNpub(toHex(pk));
+      npub = pubkeyToNpub(toHex(pk));
       updateUI();
-      log('New identity generated: ' + npub.slice(0, 16) + '...', 'ok');
+      log('New identity: ' + npub.slice(0, 16) + '...', 'ok');
       return { sk, pk, npub };
     }
 
@@ -121,25 +140,27 @@
       if (encRaw) {
         const blob = JSON.parse(encRaw);
         const pass = prompt('Enter your passphrase to unlock your identity:');
-        if (!pass) { log('Locked. Reload and enter your passphrase to continue.', 'err'); return; }
-        try {
-          sk = await decryptSecret(blob, pass);
-        } catch (e) {
-          log('Incorrect passphrase or corrupted key store.', 'err');
-          return;
-        }
+        if (!pass) { log('Locked. Reload and enter your passphrase.', 'err'); return; }
+        try { sk = await decryptSecret(blob, pass); }
+        catch (e) { log('Incorrect passphrase or corrupted key store.', 'err'); return; }
         pk = schnorr.getPublicKey(sk);
-        npub = toNpub(toHex(pk));
+        npub = pubkeyToNpub(toHex(pk));
         return;
       }
       const s = localStorage.getItem('root_sk');
       if (!s) { await newKey(); return; }
       sk = fromHex(s);
       pk = schnorr.getPublicKey(sk);
-      npub = toNpub(toHex(pk));
+      npub = pubkeyToNpub(toHex(pk));
     }
 
-    // ─── Nostr event signing / verification ─────────────────
+    function exportBackup() {
+      if (!confirm('This reveals your private key (nsec). Anyone who sees it can fully control this identity. Continue?')) return;
+      const nsec = nip19.nsecEncode(sk);
+      log('nsec backup: ' + nsec, 'err');
+      navigator.clipboard.writeText(nsec).catch(() => {});
+    }
+
     async function signEvent(content, kind, tags) {
       const pkHex = toHex(pk);
       const ev = { pubkey: pkHex, created_at: Math.floor(Date.now() / 1000), kind, tags: tags || [], content: JSON.stringify(content) };
@@ -150,10 +171,6 @@
       return ev;
     }
 
-    // Recomputes the event id from its contents and checks the schnorr
-    // signature before anything derived from the event (balance, admin
-    // config) is trusted. Without this, a malicious or compromised relay
-    // could inject arbitrary unsigned data and the client would accept it.
     async function verifyEvent(ev) {
       try {
         if (!ev || !ev.id || !ev.sig || !ev.pubkey) return false;
@@ -161,16 +178,13 @@
         const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ser)));
         if (toHex(hash) !== ev.id) return false;
         return schnorr.verify(fromHex(ev.sig), fromHex(ev.id), fromHex(ev.pubkey));
-      } catch (_) {
-        return false;
-      }
+      } catch (_) { return false; }
     }
 
     function publish(ev) {
       wsList.forEach(ws => { try { ws.send(JSON.stringify(['EVENT', ev])); } catch (_) {} });
     }
 
-    // ─── Relay connection ────────────────────────────────────
     function connect() {
       RELAYS.forEach(url => {
         try {
@@ -189,26 +203,20 @@
               const valid = await verifyEvent(ev);
               if (!valid) { log('Rejected event with invalid signature.', 'err'); return; }
               seenEventIds.add(ev.id);
-
               const d = JSON.parse(ev.content);
-
-              // Configuration events (e.g. Lightning address) are only
-              // accepted from the configured admin key.
               if (ev.kind === K.CONFIG && d.lightning) {
                 if (isAdminPubkey(ev.pubkey)) {
                   lightningAddress = d.lightning;
                   adminVerified = true;
                   log('Lightning address verified from admin key.', 'ok');
                 } else {
-                  log('Ignored configuration from unverified key: ' + toNpub(ev.pubkey).slice(0, 12), 'err');
+                  log('Ignored config from unverified key: ' + pubkeyToNpub(ev.pubkey).slice(0, 12), 'err');
                 }
               }
-
               if (ev.kind === K.TRANSFER) {
                 if (d.to === toHex(pk)) balance.ctf += Number(d.amount) || 0;
                 if (d.from === toHex(pk)) balance.ctf -= Number(d.amount) || 0;
               }
-
               updateUI();
             } catch (_) {}
           };
@@ -218,55 +226,155 @@
       });
     }
 
-    // ─── FreePay ──────────────────────────────────────────
-    // Note: balances here are computed purely from client-observed event
-    // history and are not backed by any canonical issuer. Anyone can mint
-    // CTF to themselves via the faucet — this is a demonstration/testing
-    // ledger, not a store of real value. Do not treat CTF as currency.
     async function transfer() {
       const to = document.getElementById('fpTo').value.trim();
       const amt = document.getElementById('fpAmt').value.trim();
       if (!to || !amt) { log('Enter a recipient and an amount.', 'err'); return; }
-      if (!/^npub1[0-9a-f]{1,40}$/i.test(to) && !/^[0-9a-f]{64}$/i.test(to)) {
-        log('Recipient does not look like a valid key.', 'err'); return;
-      }
       const amtNum = Number(amt);
       if (!Number.isFinite(amtNum) || amtNum <= 0) { log('Amount must be a positive number.', 'err'); return; }
+      if (onChainMode() && catfishContract) {
+        if (!ethers.isAddress(to)) { log('In on-chain mode, recipient must be an Ethereum address (0x...).', 'err'); return; }
+        try {
+          const wallet = skToEthWallet(sk, catfishProvider);
+          const contractWithSigner = catfishContract.connect(wallet);
+          const amountUnits = ethers.parseUnits(String(amtNum), catfishDecimals);
+          log('Submitting on-chain transfer...', 'info');
+          const tx = await contractWithSigner.transfer(to, amountUnits);
+          log('Transaction sent: ' + tx.hash, 'ok');
+          await tx.wait();
+          log('Confirmed on-chain.', 'ok');
+          await refreshOnChainBalance();
+        } catch (e) {
+          log('On-chain transfer failed: ' + (e.shortMessage || e.message), 'err');
+        }
+        return;
+      }
+      let toHexKey;
+      try { toHexKey = to.startsWith('npub1') ? nip19.decode(to).data : (/^[0-9a-f]{64}$/i.test(to) ? to : null); }
+      catch (_) { toHexKey = null; }
+      if (!toHexKey) { log('Recipient is not a valid npub or hex key.', 'err'); return; }
       if (amtNum > balance.ctf) { log('Amount exceeds your current balance.', 'err'); return; }
-      const ev = await signEvent({ from: toHex(pk), to, amount: amtNum, asset: 'CTF' }, K.TRANSFER, [['t', 'freepay'], ['p', to]]);
+      const ev = await signEvent({ from: toHex(pk), to: toHexKey, amount: amtNum, asset: 'CTF' }, K.TRANSFER, [['t', 'freepay'], ['p', toHexKey]]);
       publish(ev);
       balance.ctf -= amtNum;
-      log('Sent ' + amtNum + ' CTF to ' + to.slice(0, 12) + '...', 'ok');
+      log('Sent ' + amtNum + ' CTF to ' + to.slice(0, 12) + '... (off-chain, informational ledger)', 'ok');
       updateUI();
     }
 
     async function faucet() {
+      if (onChainMode()) {
+        log('On-chain mode active — no faucet; CTF supply governed by CatFish.sol contract.', 'err');
+        return;
+      }
       const ev = await signEvent({ to: toHex(pk), amount: '1000', asset: 'CTF' }, K.TRANSFER, [['t', 'freepay'], ['p', toHex(pk)]]);
       publish(ev);
       balance.ctf += 1000;
-      log('Test faucet: +1000 CTF', 'ok');
+      log('Test faucet: +1000 CTF (off-chain, informational ledger)', 'ok');
       updateUI();
     }
 
-    // ─── License ──────────────────────────────────────────
-    async function buyLicense() {
-      const plan = document.getElementById('licPlan').value;
-      const clientKeyRaw = document.getElementById('licKey').value.trim() || npub;
-      if (!/^npub1[0-9a-f]{1,40}$/i.test(clientKeyRaw) && !/^[0-9a-f]{64}$/i.test(clientKeyRaw)) {
-        log('Enter a valid key to receive the license.', 'err'); return;
-      }
-      const prices = { indie: 1000, pro: 5000, enterprise: 100000 };
+    async function resolveLnurlPay(address) {
+      const [name, domain] = address.split('@');
+      if (!name || !domain) throw new Error('Malformed Lightning address');
+      const res = await gatewayFetch(`https://${domain}/.well-known/lnurlp/${encodeURIComponent(name)}`);
+      if (!res.ok) throw new Error('LNURL-pay endpoint returned ' + res.status);
+      const meta = await res.json();
+      if (meta.tag !== 'payRequest' || !meta.callback) throw new Error('Not a valid LNURL-pay endpoint');
+      return meta;
+    }
+
+    async function getBtcUsdPrice() {
+      const res = await gatewayFetch(PRICE_API);
+      if (!res.ok) throw new Error('Price feed returned ' + res.status);
+      const data = await res.json();
+      if (!data.USD) throw new Error('Price feed missing USD price');
+      return Number(data.USD);
+    }
+
+    async function requestInvoice(meta, amountMsat) {
+      const url = new URL(meta.callback);
+      url.searchParams.set('amount', String(amountMsat));
+      const res = await gatewayFetch(url.toString());
+      const data = await res.json();
+      if (data.status === 'ERROR' || !data.pr) throw new Error(data.reason || 'Invoice request failed');
+      return data;
+    }
+
+    function stopInvoicePoll() {
+      if (invoicePoll) { clearInterval(invoicePoll); invoicePoll = null; }
+    }
+
+    function renderInvoiceStatus(text, cls) {
+      const el = document.getElementById('licInvoiceStatus');
+      if (el) { el.textContent = text; el.className = 'pay-box-status ' + (cls || ''); }
+    }
+
+    async function onPaymentConfirmed(invoiceData, plan, price, clientKeyRaw) {
+      stopInvoicePoll();
+      renderInvoiceStatus('Payment confirmed.', 'ok-text');
       const names = { indie: 'VOID Indie', pro: 'VOID Pro', enterprise: 'VOID Enterprise' };
-      const price = prices[plan];
-      if (!adminVerified) { log('Admin Lightning address is not yet verified. Contact the admin directly before paying.', 'err'); return; }
       const id = 'void-' + toHex(secp256k1.utils.randomPrivateKey()).slice(0, 12);
       const ev = await signEvent(
-        { licenseId: id, plan, clientPubkey: clientKeyRaw, price, currency: 'USD', lightning: lightningAddress, issuedAt: Date.now() },
+        { licenseId: id, plan, clientPubkey: clientKeyRaw, price, currency: 'USD', lightning: lightningAddress, paid: true, preimage: invoiceData.preimage || null, issuedAt: Date.now() },
         K.LICENSE, [['t', 'void'], ['p', clientKeyRaw]]
       );
       publish(ev);
-      log(names[plan] + ' license request created — pay $' + price, 'ok');
-      log('Pay to: ' + lightningAddress, 'info');
+      log(names[plan] + ' license issued after confirmed payment (id ' + id + ').', 'ok');
+    }
+
+    async function buyLicense() {
+      const plan = document.getElementById('licPlan').value;
+      const clientKeyRaw = document.getElementById('licKey').value.trim() || npub;
+      let clientKeyHex;
+      try { clientKeyHex = clientKeyRaw.startsWith('npub1') ? nip19.decode(clientKeyRaw).data : (/^[0-9a-f]{64}$/i.test(clientKeyRaw) ? clientKeyRaw : null); }
+      catch (_) { clientKeyHex = null; }
+      if (!clientKeyHex) { log('Enter a valid key to receive the license.', 'err'); return; }
+      const prices = { indie: 1000, pro: 5000, enterprise: 100000 };
+      const price = prices[plan];
+      if (!adminVerified) { log('Admin Lightning address is not yet verified. Cannot generate an invoice.', 'err'); return; }
+      stopInvoicePoll();
+      renderInvoiceStatus('Resolving payment endpoint...', '');
+      document.getElementById('licInvoiceArea').style.display = 'block';
+      document.getElementById('licInvoiceQr').src = '';
+      try {
+        const meta = await resolveLnurlPay(lightningAddress);
+        const btcUsd = await getBtcUsdPrice();
+        const sats = Math.ceil((price / btcUsd) * 1e8);
+        const amountMsat = sats * 1000;
+        if (amountMsat < meta.minSendable || amountMsat > meta.maxSendable) {
+          renderInvoiceStatus('Amount outside the range this address accepts.', 'err-text');
+          return;
+        }
+        renderInvoiceStatus('Requesting invoice for ' + sats + ' sats (~$' + price + ')...', '');
+        const invoiceData = await requestInvoice(meta, amountMsat);
+        const qrDataUrl = await QRCode.toDataURL('lightning:' + invoiceData.pr, { margin: 1, width: 240 });
+        document.getElementById('licInvoiceQr').src = qrDataUrl;
+        document.getElementById('licInvoiceText').value = invoiceData.pr;
+        document.getElementById('licInvoiceArea').dataset.pr = invoiceData.pr;
+        if (invoiceData.verify) {
+          renderInvoiceStatus('Invoice generated — waiting for payment...', '');
+          invoicePoll = setInterval(async () => {
+            try {
+              const res = await gatewayFetch(invoiceData.verify);
+              const status = await res.json();
+              if (status.settled) await onPaymentConfirmed({ ...invoiceData, preimage: status.preimage }, plan, price, clientKeyHex);
+            } catch (_) {}
+          }, 4000);
+        } else {
+          renderInvoiceStatus('Invoice generated. This provider does not support automatic verification (LUD-21) — pay, then use "I have paid" for manual, unverified license request.', '');
+          document.getElementById('licManualConfirm').style.display = 'block';
+          document.getElementById('licManualConfirm').onclick = async () => {
+            if (!confirm('This will issue a license marked as unverified payment, pending manual admin review. Continue?')) return;
+            const names = { indie: 'VOID Indie', pro: 'VOID Pro', enterprise: 'VOID Enterprise' };
+            const id = 'void-' + toHex(secp256k1.utils.randomPrivateKey()).slice(0, 12);
+            const ev = await signEvent({ licenseId: id, plan, clientPubkey: clientKeyHex, price, currency: 'USD', lightning: lightningAddress, paid: 'unverified', issuedAt: Date.now() }, K.LICENSE, [['t', 'void'], ['p', clientKeyHex]]);
+            publish(ev);
+            log(names[plan] + ' unverified license request submitted (id ' + id + ') — pending admin review.', 'info');
+          };
+        }
+      } catch (e) {
+        renderInvoiceStatus('Could not generate invoice: ' + e.message, 'err-text');
+      }
     }
 
     async function sendInquiry() {
@@ -278,15 +386,6 @@
       log('Inquiry sent.', 'ok');
     }
 
-    // ─── Admin: set Lightning address ─────────────────────
-    // This used to flip `adminVerified = true` locally for ANY visitor who
-    // clicked the button, regardless of whose key signed the event — a
-    // trivial local spoof of the admin state. It now only grants local
-    // verified status if this device's own key is in fact the configured
-    // admin key. Non-admin devices can still publish a candidate event (in
-    // case they are provisioning a new admin key before updating
-    // ADMIN_NPUB), but their own UI will not claim to be verified, and other
-    // clients will correctly ignore the event per verifyEvent()/isAdminPubkey().
     async function setLightning() {
       const isSelfAdmin = isAdminPubkey(toHex(pk));
       if (!isSelfAdmin) {
@@ -294,68 +393,63 @@
       } else if (adminVerified && !confirm('Update the Lightning address published under the admin key?')) {
         return;
       }
-      const addr = prompt('Enter Lightning address:');
-      if (!addr) return;
+      const addr = prompt('Enter Lightning address (user@domain.com):');
+      if (!addr || !addr.includes('@')) { log('Enter a valid Lightning address.', 'err'); return; }
       const ev = await signEvent({ lightning: addr, updatedAt: Date.now() }, K.CONFIG, [['t', 'config']]);
       publish(ev);
-      if (isSelfAdmin) {
-        lightningAddress = addr;
-        adminVerified = true;
-        log('Published and verified locally as the admin key.', 'ok');
-      } else {
-        log('Published, but this key is not the admin key — other clients will not trust it.', 'err');
-      }
+      if (isSelfAdmin) { lightningAddress = addr; adminVerified = true; log('Published and verified locally as the admin key.', 'ok'); }
+      else { log('Published, but this key is not the admin key — other clients will not trust it.', 'err'); }
       showTab('about');
-      showTab('license');
     }
 
-    // ─── Tab rendering ──────────────────────────────────────
     const TABS = {
-      pay: () => `<div class="card"><h2>FreePay</h2><p>Peer-to-peer CTF transfers via signed Nostr events. Balance is derived from observed, signature-verified event history and is informational only.</p>
-        <input type="text" id="fpTo" placeholder="Recipient key" autocomplete="off" />
+      pay: () => `<div class="card"><h2>FreePay</h2><p>${onChainMode() ? 'CTF transfers settle as real CatFish.sol contract calls. Balance is canonical on-chain state.' : 'Peer-to-peer CTF transfers via signed Nostr events. Informational only — not backed by any issuer.'}</p>
+        <input type="text" id="fpTo" placeholder="${onChainMode() ? 'Recipient Ethereum address (0x...)' : 'Recipient npub or hex key'}" autocomplete="off" />
         <input type="text" id="fpAmt" placeholder="Amount" inputmode="decimal" />
         <button class="btn prim" onclick="window.transfer()">Send</button>
-        <button class="btn sec" onclick="window.faucet()">Request test funds</button></div>`,
+        <button class="btn sec" onclick="window.faucet()" ${onChainMode() ? 'disabled' : ''}>Request test funds</button></div>`,
 
-      license: () => `<div class="card"><h2>VOID License</h2><p>AGPL to MIT relicensing. Payment via Bitcoin Lightning.</p>
-        <select id="licPlan">
-          <option value="indie">VOID Indie — $1,000 / yr</option>
-          <option value="pro">VOID Pro — $5,000 / yr</option>
-          <option value="enterprise">VOID Enterprise — $100,000 / yr</option>
-        </select>
-        <div class="pay-box">
-          <div class="pay-box-label">Payment address</div>
-          <div class="pay-box-status">${adminVerified ? 'Verified — <strong>' + escapeHtml(lightningAddress) + '</strong>' : 'Waiting for admin configuration from the relay network...'}</div>
-          <button class="btn sec" style="margin:4px 0;padding:8px;font-size:0.8rem;" onclick="navigator.clipboard.writeText('${escapeHtml(lightningAddress)}')" ${adminVerified ? '' : 'disabled'}>Copy address</button>
-        </div>
+      license: () => `<div class="card"><h2>VOID License</h2><p>AGPL to MIT relicensing. Payment via Bitcoin Lightning, invoiced live through LNURL-pay.</p>
+        <select id="licPlan"><option value="indie">VOID Indie — $1,000 / yr</option><option value="pro">VOID Pro — $5,000 / yr</option><option value="enterprise">VOID Enterprise — $100,000 / yr</option></select>
         <input type="text" id="licKey" placeholder="Key to receive the license (defaults to yours)" autocomplete="off" />
-        <button class="btn prim" onclick="window.buyLicense()">Generate license request</button></div>`,
+        <div class="pay-box"><div class="pay-box-label">Lightning address</div><div class="pay-box-status">${adminVerified ? 'Verified — <strong>' + escapeHtml(lightningAddress) + '</strong>' : 'Waiting for admin config from relays...'}</div></div>
+        <button class="btn prim" onclick="window.buyLicense()" ${adminVerified ? '' : 'disabled'}>Generate invoice</button>
+        <div id="licInvoiceArea" style="display:none;">
+          <div class="pay-box">
+            <img id="licInvoiceQr" style="width:180px;height:180px;display:block;margin:0 auto 8px;border-radius:8px;background:#fff;padding:8px;" />
+            <div id="licInvoiceStatus" class="pay-box-status">—</div>
+            <textarea id="licInvoiceText" rows="2" readonly style="font-size:0.65rem;font-family:monospace;"></textarea>
+            <button class="btn sec" style="padding:8px;font-size:0.8rem;" onclick="navigator.clipboard.writeText(document.getElementById('licInvoiceText').value)">Copy invoice</button>
+            <button id="licManualConfirm" class="btn sec" style="display:none;padding:8px;font-size:0.8rem;">I have paid</button>
+          </div>
+        </div></div>`,
 
-      pqc: () => `<div class="card"><h2>PQC Shield</h2><p>Post-quantum migration services, aligned to NIST FIPS 203 / 204.</p>
+      pqc: () => `<div class="card"><h2>PQC Shield</h2><p>Post-quantum migration, aligned to NIST FIPS 203 / 204.</p>
         <div class="stat"><span class="lbl">Audit</span><span class="val">$10,000</span></div>
         <div class="stat"><span class="lbl">Implementation</span><span class="val">$25,000</span></div>
         <div class="stat"><span class="lbl">Enterprise support</span><span class="val">$200,000 / yr</span></div>
         <textarea id="pqcMsg" rows="3" placeholder="Describe your requirements"></textarea>
         <button class="btn prim" onclick="window.sendInquiry()">Send inquiry</button></div>`,
 
-      about: () => `<div class="card"><h2>root</h2><p>A self-custodied client on Nostr. No application server. No custodial bank.</p>
-        <div class="stat"><span class="lbl">Relays connected</span><span class="val">${wsList.length} / ${RELAYS.length}</span></div>
+      about: () => `<div class="card"><h2>root</h2><p>A self-custodied client on Nostr. No server. No custodial bank.</p>
+        <div class="stat"><span class="lbl">Relays</span><span class="val">${wsList.length} / ${RELAYS.length}</span></div>
         <div class="stat"><span class="lbl">Status</span><span class="val" style="color:#22c55e">live</span></div>
         <div class="stat"><span class="lbl">Your key</span><span class="val" style="font-size:0.65rem">${escapeHtml(npub.slice(0, 16))}...</span></div>
         <div class="key-display">${escapeHtml(npub)}</div>
         <div class="divider">
-          <p class="section-label">Lightning<span style="font-size:0.75rem;font-weight:400;"> ${adminVerified ? escapeHtml(lightningAddress) : '(not yet verified)'}</span></p>
-          <p class="fine-print">Admin key: <strong>${escapeHtml(ADMIN_NPUB)}</strong><br/>
-          Only a signature-verified kind 30004 event from this key is accepted as configuration.</p>
+          <p class="section-label">Lightning<span style="font-weight:400;font-size:0.75rem;"> ${adminVerified ? escapeHtml(lightningAddress) : '(not yet verified)'}</span></p>
+          <p class="fine-print">Admin key: <strong>${escapeHtml(ADMIN_NPUB)}</strong><br/>Only a signature-verified kind 30004 event from this key is accepted.</p>
           <button class="btn sec" style="margin-top:6px;padding:8px;font-size:0.8rem;" onclick="navigator.clipboard.writeText('${escapeHtml(lightningAddress)}')" ${adminVerified ? '' : 'disabled'}>Copy address</button>
           <button class="btn sec" style="margin-top:4px;padding:8px;font-size:0.8rem;" onclick="window.setLightning()">Publish Lightning config</button>
         </div>
         <div class="divider">
-          <p class="fine-print">Your key is stored only on this device (optionally passphrase-encrypted). There is no account recovery — losing your device or passphrase means losing this identity.</p>
+          <p class="fine-print">Your key is stored only on this device (optionally passphrase-encrypted). No recovery.</p>
+          <button class="btn sec" style="margin-top:6px;padding:8px;font-size:0.8rem;" onclick="window.exportBackup()">Reveal backup (nsec)</button>
         </div></div>`
     };
 
     function showTab(name) {
+      if (name !== 'license') stopInvoicePoll();
       document.getElementById('tabContent').innerHTML = (TABS[name] || TABS.pay)();
       document.querySelectorAll('.tabs a').forEach(a => a.classList.remove('active'));
       const tabBtn = document.querySelector(`.tabs a[data-tab="${name}"]`);
@@ -364,17 +458,19 @@
 
     window.newKey = newKey; window.transfer = transfer; window.faucet = faucet;
     window.buyLicense = buyLicense; window.sendInquiry = sendInquiry;
-    window.setLightning = setLightning; window.showTab = showTab;
+    window.setLightning = setLightning; window.showTab = showTab; window.exportBackup = exportBackup;
 
-    // ─── Init ──────────────────────────────────────────────
     (async () => {
+      if (!adminPkHex) log('ADMIN_NPUB is not a valid npub yet. Admin actions are disabled until configured.', 'err');
       await loadKey();
-      if (!sk) return; // locked pending passphrase
+      if (!sk) return;
       showTab('pay');
       connect();
       updateUI();
       log('root loaded.');
       log('Identity: ' + npub.slice(0, 16) + '...', 'ok');
+      if (onChainMode()) { await initCatfish(); if (catfishContract) await refreshOnChainBalance(); }
+      else { log('CTF: off-chain, informational (set CATFISH_RPC_URL + CATFISH_CONTRACT for on-chain ledger).', 'info'); }
     })();
   </script>
   <style>
@@ -383,8 +479,8 @@
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; min-height: 100vh; }
     .container { max-width: 480px; margin: 0 auto; padding: 16px; flex: 1; width: 100%; }
     header { text-align: center; padding: 28px 0 8px; }
-    header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.02em; color: var(--text); }
-    header p { font-size: 0.8rem; color: var(--muted); margin-top: 4px; letter-spacing: 0.02em; }
+    header h1 { font-size: 1.5rem; font-weight: 700; color: var(--text); }
+    header p { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
     .badges { margin-top: 10px; display: flex; justify-content: center; gap: 6px; }
     .bar { background: var(--surface); border-radius: 10px; padding: 10px 14px; margin: 8px 0; display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; border: 1px solid var(--border); }
     .bar .label { color: var(--muted); margin-right: 4px; }
@@ -409,16 +505,18 @@
     .key-display { font-family: 'SF Mono', Menlo, monospace; font-size: 0.7rem; color: var(--muted); word-break: break-all; background: var(--bg); padding: 8px; border-radius: 6px; margin-top: 4px; }
     .pay-box { background: var(--bg); border-radius: 8px; padding: 12px; margin: 10px 0; text-align: center; border: 1px solid var(--border); }
     .pay-box-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
-    .pay-box-status { font-size: 0.72rem; color: var(--muted); }
+    .pay-box-status { font-size: 0.72rem; color: var(--muted); margin-bottom: 6px; }
+    .pay-box-status.ok-text { color: #22c55e; }
+    .pay-box-status.err-text { color: var(--err); }
     .divider { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
     .section-label { font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
     .fine-print { font-size: 0.68rem; color: var(--muted); line-height: 1.5; }
-    .log { background: var(--bg); border-radius: 8px; padding: 8px; font-family: 'SF Mono', Menlo, monospace; font-size: 0.65rem; max-height: 120px; overflow-y: auto; }
+    .log { background: var(--bg); border-radius: 8px; padding: 8px; font-family: 'SF Mono', Menlo, monospace; font-size: 0.65rem; max-height: 120px; overflow-y: auto; word-break: break-all; }
     .log .l-ok { color: #22c55e; padding: 1px 0; }
     .log .l-err { color: var(--err); padding: 1px 0; }
     .log .l-info { color: var(--muted); padding: 1px 0; }
-    footer { text-align: center; color: var(--muted); font-size: 0.65rem; padding: 18px 0; border-top: 1px solid var(--border); margin-top: auto; letter-spacing: 0.02em; }
-    .badge { display: inline-block; background: #1a1a2e; padding: 3px 8px; border-radius: 4px; font-size: 0.65rem; border: 1px solid var(--border-2); color: var(--muted); letter-spacing: 0.03em; }
+    footer { text-align: center; color: var(--muted); font-size: 0.65rem; padding: 18px 0; border-top: 1px solid var(--border); margin-top: auto; }
+    .badge { display: inline-block; background: #1a1a2e; padding: 3px 8px; border-radius: 4px; font-size: 0.65rem; border: 1px solid var(--border-2); color: var(--muted); }
   </style>
 </head>
 <body>
