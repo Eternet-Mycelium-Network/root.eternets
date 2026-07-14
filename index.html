@@ -102,10 +102,15 @@
   <script>
     // ─── Nostr crypto ────────────────────────────────────
     const RELAYS = ['wss://relay.primal.net', 'wss://nos.lol'];
-    const K = { TRANSFER: 30000, LICENSE: 30001, LEAD: 30002 };
+    const K = { TRANSFER: 30000, LICENSE: 30001, LEAD: 30002, CONFIG: 30004 };
+    // Admin pubkey (the site owner) — verifiable in Nostr
+    // Users can check: nostr key matches events signed by this key
+    const ADMIN_NPUB = 'npub1root'; // placeholder — replace with your npub
+    const ADMIN_PK = ''; // hex pubkey (set via event)
     let sk, pk, npub = '';
     let wsList = [];
     let balance = { ctf: 0, hcr: 0 };
+    let lightningAddress = 'pay@eternets.com'; // default, overridden by Nostr event
 
     function toHex(b) { return Array.from(b).map(x => x.toString(16).padStart(2,'0')).join(''); }
     function fromHex(s) { return new Uint8Array(s.match(/.{2}/g).map(x => parseInt(x,16))); }
@@ -163,6 +168,7 @@
             wsList.push(ws);
             const pkHex = toHex(pk);
             ws.send(JSON.stringify(['REQ', 'bal', { kinds: [K.TRANSFER], '#t': ['freepay'], limit: 50 }]));
+            ws.send(JSON.stringify(['REQ', 'cfg', { kinds: [K.CONFIG], limit: 5 }])); // get admin lightning address
             log('🟢 ' + url.replace('wss://',''), 'ok');
           };
           ws.onmessage = e => {
@@ -171,8 +177,16 @@
               if (type === 'EVENT' && ev) {
                 try {
                   const d = JSON.parse(ev.content);
-                  if (d.to === toHex(pk)) balance.ctf += Number(d.amount) || 0;
-                  if (d.from === toHex(pk)) balance.ctf -= Number(d.amount) || 0;
+                  // Check if it's a config event with lightning address
+                  if (ev.kind === K.CONFIG && d.lightning) {
+                    lightningAddress = d.lightning;
+                    log('⚡ Lightning: ' + lightningAddress, 'ok');
+                  }
+                  // Balance from transfers
+                  if (ev.kind === K.TRANSFER) {
+                    if (d.to === toHex(pk)) balance.ctf += Number(d.amount) || 0;
+                    if (d.from === toHex(pk)) balance.ctf -= Number(d.amount) || 0;
+                  }
                   updateUI();
                 } catch(_) {}
               }
@@ -214,7 +228,7 @@
       } else if (path === '/tab/license') {
         e.preventDefault();
         document.getElementById('tabContent').innerHTML =
-          '<div class="card"><h2>🔐 VOID License</h2><p>AGPL → MIT. Pay with Bitcoin Lightning. Receive license as Nostr event.</p><select id="licPlan" _="on change set #lnPrice.textContent to event.target.value == 'indie' ? '$1,000' : event.target.value == 'pro' ? '$5,000' : '$100,000'"><option value="indie">VOID Indie — $1,000/yr</option><option value="pro">VOID Pro — $5,000/yr</option><option value="enterprise">VOID Enterprise — $100,000/yr</option></select><div style="background:#0a0a0f;border-radius:8px;padding:12px;margin:8px 0;text-align:center;"><div style="font-size:0.8rem;color:var(--muted);margin-bottom:4px;">⚡ Pay with Lightning</div><div style="font-size:1.2rem;font-weight:700;color:#f59e0b;" id="lnPrice">$1,000</div><div style="font-size:0.7rem;color:var(--muted);margin:4px 0;">Lightning Address: <strong>pay@eternets.com</strong></div><button class="btn sec" style="margin:4px 0;padding:8px;font-size:0.8rem;" _="on click navigator.clipboard.writeText('pay@eternets.com'); log('⚡ Lightning Address copied!','ok')">📋 Copy Address</button></div><input type="text" id="licKey" placeholder="your npub (for license event)" /><div style="font-size:0.75rem;color:var(--muted);margin:6px 0;">After payment, enter your npub and click generate. License event will be sent to your pubkey.</div><button class="btn prim" _="on click call window.buyLicense()">🔐 generate license</button></div>';
+          '<div class="card"><h2>🔐 VOID License</h2><p>AGPL → MIT. Pay with Bitcoin Lightning. Receive license as Nostr event.</p><select id="licPlan" _="on change set #lnPrice.textContent to event.target.value == 'indie' ? '$1,000' : event.target.value == 'pro' ? '$5,000' : '$100,000'"><option value="indie">VOID Indie — $1,000/yr</option><option value="pro">VOID Pro — $5,000/yr</option><option value="enterprise">VOID Enterprise — $100,000/yr</option></select><div style="background:#0a0a0f;border-radius:8px;padding:12px;margin:8px 0;text-align:center;"><div style="font-size:0.8rem;color:var(--muted);margin-bottom:4px;">⚡ Pay with Lightning</div><div style="font-size:1.2rem;font-weight:700;color:#f59e0b;" id="lnPrice">$1,000</div><div style="font-size:0.7rem;color:var(--muted);margin:4px 0;">Lightning Address: <strong style="color:var(--accent);" id="lnAddrDisplay">' + lightningAddress + '</strong></div><button class="btn sec" style="margin:4px 0;padding:8px;font-size:0.8rem;" _="on click navigator.clipboard.writeText(document.getElementById('lnAddrDisplay').textContent); log('⚡ Address copied!','ok')">📋 Copy</button></div><input type="text" id="licKey" placeholder="your npub (for license event)" /><div style="font-size:0.75rem;color:var(--muted);margin:6px 0;">After payment, enter your npub and click generate. License event sent to your pubkey.</div><button class="btn prim" _="on click call window.buyLicense()">🔐 generate license</button></div>';
       } else if (path === '/tab/pqc') {
         e.preventDefault();
         document.getElementById('tabContent').innerHTML =
@@ -222,7 +236,7 @@
       } else if (path === '/tab/about') {
         e.preventDefault();
         document.getElementById('tabContent').innerHTML =
-          '<div class="card"><h2>🍄 root</h2><p>Your sovereign cloud on nostr. No servers. No bank. No permission.</p><div class="stat"><span class="lbl">🔗 relays</span><span class="val">' + RELAYS.length + '</span></div><div class="stat"><span class="lbl">👤 peers</span><span class="val">' + wsList.length + '</span></div><div class="stat"><span class="lbl">📡 status</span><span class="val" style="color:#22c55e">live on nostr</span></div><div class="stat"><span class="lbl">🔐 key</span><span class="val" style="font-size:0.65rem">' + npub.slice(0,16) + '..</span></div><div class="key-display">' + npub + '</div><div style="margin-top:12px;padding-top:12px;border-top:1px solid #1a1a2e;"><p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px;"><strong>⚡ Pay with Lightning</strong><br/>Send BTC/Lightning to receive CTF or purchase licenses.</p><div style="background:#0a0a0f;border-radius:6px;padding:8px;font-size:0.75rem;font-family:monospace;">pay@eternets.com</div><button class="btn sec" style="margin-top:6px;padding:8px;font-size:0.8rem;" _="on click navigator.clipboard.writeText('pay@eternets.com'); log('⚡ copied!','ok')">📋 Copy LN Address</button></div></div>';
+          '<div class="card"><h2>🍄 root</h2><p>Your sovereign cloud on nostr. No servers. No bank. No permission.</p><div class="stat"><span class="lbl">🔗 relays</span><span class="val">' + RELAYS.length + '</span></div><div class="stat"><span class="lbl">📡 status</span><span class="val" style="color:#22c55e">live on nostr</span></div><div class="stat"><span class="lbl">🔐 your key</span><span class="val" style="font-size:0.65rem">' + npub.slice(0,16) + '..</span></div><div class="key-display">' + npub + '</div><div style="margin-top:12px;padding-top:12px;border-top:1px solid #1a1a2e;"><p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px;"><strong>⚡ Payments</strong><br/>Lightning Address loaded from Nostr event kind 30004.<br/>Only the admin key can update it. Anyone can verify.</p><div style="background:#0a0a0f;border-radius:6px;padding:8px;font-size:0.75rem;font-family:monospace;word-break:break-all;">' + lightningAddress + '</div><button class="btn sec" style="margin-top:6px;padding:8px;font-size:0.8rem;" _="on click navigator.clipboard.writeText(\'' + lightningAddress + '\'); log('⚡ copied!','ok')">📋 Copy</button><button class="btn sec" style="margin-top:4px;padding:8px;font-size:0.8rem;" _="on click call window.setLightning()">⚙️ Update (admin only)</button><p style="font-size:0.7rem;color:var(--muted);margin-top:8px;">Admin: ' + ADMIN_NPUB + '<br/>Publish kind 30004 from admin key to change.</p></div></div>';
       }
     });
 
@@ -234,10 +248,19 @@
       const planNames = { indie: 'VOID Indie', pro: 'VOID Pro', enterprise: 'VOID Enterprise' };
       const price = prices[plan];
       const licenseId = 'void-' + toHex(secp256k1.utils.randomPrivateKey()).slice(0, 12);
-      const ev = await signEvent({ licenseId, plan, clientPubkey: clientKey, price, currency: 'USD', lightning: 'pay@eternets.com', issuedAt: Date.now() }, K.LICENSE, [['t','void'],['p',clientKey]]);
+      const ev = await signEvent({ licenseId, plan, clientPubkey: clientKey, price, currency: 'USD', lightning: lightningAddress, issuedAt: Date.now() }, K.LICENSE, [['t','void'],['p',clientKey]]);
       publish(ev);
       log('🔐 ' + planNames[plan] + ' license issued', 'ok');
-      log('   Pay $' + price + ' via Lightning: pay@eternets.com', 'info');
+      log('   Pay $' + price + ' via Lightning: ' + lightningAddress, 'info');
+    };
+
+    window.setLightning = async function() {
+      const addr = prompt('Enter new Lightning Address:');
+      if (!addr) return;
+      const ev = await signEvent({ lightning: addr, updatedAt: Date.now() }, K.CONFIG, [['t','config']]);
+      publish(ev);
+      lightningAddress = addr;
+      log('⚡ Lightning Address updated: ' + addr, 'ok');
     };
 
     window.sendInquiry = async function() {
@@ -251,6 +274,9 @@
     window.newKey = newKey;
     window.transfer = transfer;
     window.faucet = faucet;
+    window.buyLicense = buyLicense;
+    window.sendInquiry = sendInquiry;
+    window.setLightning = setLightning;
     loadKey();
     connect();
   </script>
