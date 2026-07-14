@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>🍄 root — ËTΞRNETS Cloud</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="https://unpkg.com/hyperscript.org@0.9.13"></script>
+  <script type="module">
+    import { schnorr, secp256k1 } from 'https://esm.sh/@noble/curves@1.6.0/secp256k1';
+    window.schnorr = schnorr; window.secp256k1 = secp256k1;
+  </script>
+  <style>
+    :root { --bg: #0a0a0f; --surface: #12121e; --accent: #7c3aed; --text: #e0e0e0; --muted: #666; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+    .container { max-width: 480px; margin: 0 auto; padding: 16px; flex: 1; }
+    header { text-align: center; padding: 32px 0 12px; }
+    header .logo { font-size: 3rem; }
+    header h1 { font-size: 1.8rem; color: var(--accent); letter-spacing: -1px; }
+    header p { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+    .bar { background: var(--surface); border-radius: 10px; padding: 10px 14px; margin: 10px 0; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; border: 1px solid #1a1a2e; }
+    .tabs { display: flex; gap: 4px; margin: 10px 0; }
+    .tabs a { flex: 1; padding: 10px; text-align: center; border-radius: 8px; border: 1px solid #2a2a3e; background: var(--surface); color: var(--muted); cursor: pointer; text-decoration: none; font-size: 0.85rem; transition: border .2s; }
+    .tabs a:hover, .tabs a.active { border-color: var(--accent); color: var(--text); }
+    .card { background: var(--surface); border-radius: 12px; padding: 16px; margin: 8px 0; border: 1px solid #1a1a2e; }
+    .card h2 { font-size: 1rem; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .card p { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+    input, select, textarea { width: 100%; background: #0a0a0f; border: 1px solid #2a2a3e; border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 0.9rem; margin: 4px 0; font-family: inherit; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    textarea { min-height: 60px; resize: vertical; }
+    .btn { display: block; width: 100%; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; border: none; cursor: pointer; margin: 6px 0; transition: opacity .2s; }
+    .btn:hover { opacity: .85; }
+    .btn.prim { background: var(--accent); color: white; }
+    .btn.sec { background: #1e293b; color: var(--text); }
+    .flex { display: flex; gap: 6px; }
+    .flex .btn { flex: 1; }
+    .log { background: #0a0a0f; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 0.7rem; max-height: 140px; overflow-y: auto; }
+    .log div { padding: 2px 0; }
+    .ok { color: #22c55e; } .err { color: #ef4444; } .info { color: var(--muted); }
+    .badge { display: inline-block; background: #1a1a2e; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; border: 1px solid #2a2a3e; }
+    .stat { font-size: 0.85rem; margin: 4px 0; }
+    .stat .lbl { color: var(--muted); }
+    .stat .val { font-family: monospace; float: right; }
+    footer { text-align: center; color: var(--muted); font-size: 0.7rem; padding: 20px 0; border-top: 1px solid #1a1a2e; margin-top: auto; }
+    .key-display { font-family: monospace; font-size: 0.7rem; color: var(--muted); word-break: break-all; background: #0a0a0f; padding: 8px; border-radius: 6px; margin-top: 4px; }
+    @media (max-width:400px) { header h1 { font-size: 1.4rem; } .tabs a { font-size: 0.75rem; padding: 8px; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- HEADER -->
+    <header>
+      <div class="logo">🍄</div>
+      <h1>root</h1>
+      <p>your sovereign cloud on nostr</p>
+      <div style="margin-top:8px;">
+        <span class="badge">📡 nostr</span>
+        <span class="badge">🔐 p2p</span>
+        <span class="badge">🐟 ctf</span>
+      </div>
+    </header>
+
+    <!-- STATUS BAR -->
+    <div class="bar" id="statusBar">
+      <span>👤 <span id="npubDisplay">—</span></span>
+      <span>🐟 <span id="balCtf">0</span></span>
+      <span>🐍 <span id="balHcr">0</span></span>
+      <button class="btn sec" style="padding:4px 10px;font-size:0.7rem;margin:0;width:auto;" _="on click call window.newKey()">🔄</button>
+    </div>
+
+    <!-- TABS (HTMX) -->
+    <div class="tabs">
+      <a href="#" class="active" hx-get="/tab/freepay" hx-target="#tabContent" hx-trigger="click" hx-swap="innerHTML" _="on click add .active to me remove .active from .tabs a">💳 pay</a>
+      <a href="#" hx-get="/tab/license" hx-target="#tabContent" hx-trigger="click" hx-swap="innerHTML" _="on click add .active to me remove .active from .tabs a">🔐 license</a>
+      <a href="#" hx-get="/tab/pqc" hx-target="#tabContent" hx-trigger="click" hx-swap="innerHTML" _="on click add .active to me remove .active from .tabs a">🛡️ pqc</a>
+      <a href="#" hx-get="/tab/about" hx-target="#tabContent" hx-trigger="click" hx-swap="innerHTML" _="on click add .active to me remove .active from .tabs a">ℹ️ about</a>
+    </div>
+
+    <!-- TAB CONTENT (HTMX swapped) -->
+    <div id="tabContent">
+      <!-- FreePay tab (loaded by default) -->
+      <div class="card">
+        <h2>💳 FreePay</h2>
+        <p>Transfer CTF directly P2P via nostr events. Zero fee. Zero server.</p>
+        <input type="text" id="fpTo" placeholder="recipient npub..." />
+        <input type="text" id="fpAmt" placeholder="amount" />
+        <button class="btn prim" _="on click call window.transfer()">📤 send</button>
+        <button class="btn sec" _="on click call window.faucet()">🚰 faucet</button>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div class="card" style="padding:8px;">
+      <div class="log" id="log"><div class="info">🍄 root — your sovereign cloud</div></div>
+    </div>
+
+    <footer>🍄 root — ËTΞRNETS · AGPL-3.0 · all on nostr · no servers</footer>
+  </div>
+
+  <script>
+    // ─── Nostr crypto ────────────────────────────────────
+    const RELAYS = ['wss://relay.primal.net', 'wss://nos.lol'];
+    const K = { TRANSFER: 30000, LICENSE: 30001, LEAD: 30002 };
+    let sk, pk, npub = '';
+    let wsList = [];
+    let balance = { ctf: 0, hcr: 0 };
+
+    function toHex(b) { return Array.from(b).map(x => x.toString(16).padStart(2,'0')).join(''); }
+    function fromHex(s) { return new Uint8Array(s.match(/.{2}/g).map(x => parseInt(x,16))); }
+
+    function newKey() {
+      sk = secp256k1.utils.randomPrivateKey();
+      pk = schnorr.getPublicKey(sk);
+      npub = 'npub1' + toHex(pk).slice(0, 40);
+      localStorage.setItem('root_sk', toHex(sk));
+      localStorage.setItem('root_pk', toHex(pk));
+      updateUI();
+      log('🔑 new key: ' + npub.slice(0,16) + '...', 'ok');
+    }
+
+    function loadKey() {
+      const s = localStorage.getItem('root_sk');
+      if (!s) { newKey(); return; }
+      sk = fromHex(s);
+      pk = schnorr.getPublicKey(sk);
+      npub = 'npub1' + toHex(pk).slice(0, 40);
+      updateUI();
+    }
+
+    function log(msg, type = 'info') {
+      const el = document.getElementById('log');
+      const d = document.createElement('div'); d.className = type;
+      d.textContent = msg; el.appendChild(d); el.scrollTop = el.scrollHeight;
+    }
+
+    function updateUI() {
+      document.getElementById('npubDisplay').textContent = npub.slice(0, 12) + '..';
+      document.getElementById('balCtf').textContent = balance.ctf;
+      document.getElementById('balHcr').textContent = balance.hcr;
+    }
+
+    async function signEvent(content, kind, tags) {
+      const pkHex = toHex(pk);
+      const ev = { pubkey: pkHex, created_at: Math.floor(Date.now()/1000), kind, tags: tags||[], content: JSON.stringify(content) };
+      const ser = JSON.stringify([0, ev.pubkey, ev.created_at, ev.kind, ev.tags, ev.content]);
+      const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ser)));
+      ev.id = toHex(hash);
+      ev.sig = toHex(schnorr.sign(hash, toHex(sk)));
+      return ev;
+    }
+
+    function publish(ev) {
+      wsList.forEach(ws => { try { ws.send(JSON.stringify(['EVENT', ev])); } catch(_) {} });
+    }
+
+    function connect() {
+      RELAYS.forEach(url => {
+        try {
+          const ws = new WebSocket(url);
+          ws.onopen = () => {
+            wsList.push(ws);
+            const pkHex = toHex(pk);
+            ws.send(JSON.stringify(['REQ', 'bal', { kinds: [K.TRANSFER], '#t': ['freepay'], limit: 50 }]));
+            log('🟢 ' + url.replace('wss://',''), 'ok');
+          };
+          ws.onmessage = e => {
+            try {
+              const [type, , ev] = JSON.parse(e.data);
+              if (type === 'EVENT' && ev) {
+                try {
+                  const d = JSON.parse(ev.content);
+                  if (d.to === toHex(pk)) balance.ctf += Number(d.amount) || 0;
+                  if (d.from === toHex(pk)) balance.ctf -= Number(d.amount) || 0;
+                  updateUI();
+                } catch(_) {}
+              }
+            } catch(_) {}
+          };
+          ws.onerror = () => log('🔴 ' + url.replace('wss://',''), 'err');
+        } catch(e) { log('🔴 ' + url, 'err'); }
+      });
+    }
+
+    // ─── FreePay ─────────────────────────────────────────
+    async function transfer() {
+      const to = document.getElementById('fpTo').value.trim();
+      const amt = document.getElementById('fpAmt').value.trim();
+      if (!to || !amt) { log('fill recipient and amount', 'err'); return; }
+      const ev = await signEvent({ from: toHex(pk), to, amount: amt, asset: 'CTF' }, K.TRANSFER, [['t','freepay'],['p',to]]);
+      publish(ev);
+      balance.ctf -= Number(amt);
+      log('📤 ' + amt + ' CTF → ' + to.slice(0,12) + '...', 'ok');
+      updateUI();
+    }
+
+    async function faucet() {
+      const ev = await signEvent({ to: toHex(pk), amount: '1000', asset: 'CTF' }, K.TRANSFER, [['t','freepay'],['p',toHex(pk)]]);
+      publish(ev);
+      balance.ctf += 1000;
+      log('🚰 1000 CTF', 'ok');
+      updateUI();
+    }
+
+    // ─── HTMX tab handlers ──────────────────────────────
+    document.body.addEventListener('htmx:configRequest', (e) => {
+      // Intercept HTMX requests and serve tab content locally
+      const path = e.detail.path;
+      if (path === '/tab/freepay') {
+        e.preventDefault();
+        document.getElementById('tabContent').innerHTML =
+          '<div class="card"><h2>💳 FreePay</h2><p>Transfer CTF P2P via nostr events.</p><input type="text" id="fpTo" placeholder="recipient npub..." /><input type="text" id="fpAmt" placeholder="amount" /><button class="btn prim" _="on click call window.transfer()">📤 send</button><button class="btn sec" _="on click call window.faucet()">🚰 faucet</button></div>';
+      } else if (path === '/tab/license') {
+        e.preventDefault();
+        document.getElementById('tabContent').innerHTML =
+          '<div class="card"><h2>🔐 VOID License</h2><p>AGPL → MIT. Use our code in proprietary projects. Paid in CTF.</p><select id="licPlan"><option value="indie">VOID Indie — 500 CTF/yr</option><option value="pro">VOID Pro — 5000 CTF/yr</option><option value="enterprise">VOID Enterprise — 50000 CTF/yr</option></select><input type="text" id="licKey" placeholder="your pubkey (npub...)" /><button class="btn prim" _="on click call window.buyLicense()">🔐 generate license</button></div>';
+      } else if (path === '/tab/pqc') {
+        e.preventDefault();
+        document.getElementById('tabContent').innerHTML =
+          '<div class="card"><h2>🛡️ PQC Shield</h2><p>Post-quantum migration. NIST FIPS 203/204. Send inquiry via nostr DM.</p><textarea id="pqcMsg" placeholder="what do you need?"></textarea><button class="btn prim" _="on click call window.sendInquiry()">📩 send</button></div>';
+      } else if (path === '/tab/about') {
+        e.preventDefault();
+        document.getElementById('tabContent').innerHTML =
+          '<div class="card"><h2>🍄 root</h2><p>Your sovereign cloud on nostr. No servers. No bank. No permission.</p><div class="stat"><span class="lbl">🔗 relays</span><span class="val">' + RELAYS.length + '</span></div><div class="stat"><span class="lbl">👤 peers</span><span class="val">' + wsList.length + '</span></div><div class="stat"><span class="lbl">📡 status</span><span class="val" style="color:#22c55e">live on nostr</span></div><div class="stat"><span class="lbl">🔐 key</span><span class="val" style="font-size:0.65rem">' + npub.slice(0,16) + '..</span></div><div class="key-display">' + npub + '</div></div>';
+      }
+    });
+
+    // ─── License ─────────────────────────────────────────
+    window.buyLicense = async function() {
+      const plan = document.getElementById('licPlan').value;
+      const clientKey = document.getElementById('licKey').value.trim() || npub;
+      const prices = { indie: 500, pro: 5000, enterprise: 50000 };
+      const licenseId = 'void-' + toHex(secp256k1.utils.randomPrivateKey()).slice(0, 12);
+      const ev = await signEvent({ licenseId, plan, clientPubkey: clientKey, price: prices[plan], issuedAt: Date.now() }, K.LICENSE, [['t','void'],['p',clientKey]]);
+      publish(ev);
+      log('🔐 ' + plan.toUpperCase() + ' license — pay ' + prices[plan] + ' CTF', 'ok');
+    };
+
+    window.sendInquiry = async function() {
+      const msg = document.getElementById('pqcMsg').value.trim() || 'PQC inquiry';
+      const ev = await signEvent({ message: msg, from: npub }, K.LEAD, [['t','pqc']]);
+      publish(ev);
+      log('📩 inquiry sent via nostr', 'ok');
+    };
+
+    // ─── Init ────────────────────────────────────────────
+    window.newKey = newKey;
+    window.transfer = transfer;
+    window.faucet = faucet;
+    loadKey();
+    connect();
+  </script>
+</body>
+</html>
