@@ -214,7 +214,7 @@
       } else if (path === '/tab/license') {
         e.preventDefault();
         document.getElementById('tabContent').innerHTML =
-          '<div class="card"><h2>🔐 VOID License</h2><p>AGPL → MIT. Use our code in proprietary projects. Paid in CTF.</p><select id="licPlan"><option value="indie">VOID Indie — 500 CTF/yr</option><option value="pro">VOID Pro — 5000 CTF/yr</option><option value="enterprise">VOID Enterprise — 50000 CTF/yr</option></select><input type="text" id="licKey" placeholder="your pubkey (npub...)" /><button class="btn prim" _="on click call window.buyLicense()">🔐 generate license</button></div>';
+          '<div class="card"><h2>🔐 VOID License</h2><p>AGPL → MIT. Pay with Bitcoin Lightning. Receive license as Nostr event.</p><select id="licPlan"><option value="indie">VOID Indie — $500/yr (500 CTF)</option><option value="pro">VOID Pro — $5,000/yr (5000 CTF)</option><option value="enterprise">VOID Enterprise — $50,000/yr (50000 CTF)</option></select><div style="background:#0a0a0f;border-radius:8px;padding:12px;margin:8px 0;text-align:center;"><div style="font-size:0.8rem;color:var(--muted);margin-bottom:4px;">⚡ Pay with Lightning</div><div style="font-size:1.2rem;font-weight:700;color:#f59e0b;" id="lnPrice">$500</div><div style="font-size:0.7rem;color:var(--muted);margin:4px 0;">Lightning Address: <strong>pay@eternets.com</strong></div><button class="btn sec" style="margin:4px 0;padding:8px;font-size:0.8rem;" _="on click navigator.clipboard.writeText('pay@eternets.com'); log('⚡ Lightning Address copied!','ok')">📋 Copy Address</button></div><input type="text" id="licKey" placeholder="your npub (for license event)" /><div style="font-size:0.75rem;color:var(--muted);margin:6px 0;">After payment, enter your npub and click generate. License event will be sent to your pubkey.</div><button class="btn prim" _="on click call window.buyLicense()">🔐 generate license</button></div>';
       } else if (path === '/tab/pqc') {
         e.preventDefault();
         document.getElementById('tabContent').innerHTML =
@@ -222,7 +222,7 @@
       } else if (path === '/tab/about') {
         e.preventDefault();
         document.getElementById('tabContent').innerHTML =
-          '<div class="card"><h2>🍄 root</h2><p>Your sovereign cloud on nostr. No servers. No bank. No permission.</p><div class="stat"><span class="lbl">🔗 relays</span><span class="val">' + RELAYS.length + '</span></div><div class="stat"><span class="lbl">👤 peers</span><span class="val">' + wsList.length + '</span></div><div class="stat"><span class="lbl">📡 status</span><span class="val" style="color:#22c55e">live on nostr</span></div><div class="stat"><span class="lbl">🔐 key</span><span class="val" style="font-size:0.65rem">' + npub.slice(0,16) + '..</span></div><div class="key-display">' + npub + '</div></div>';
+          '<div class="card"><h2>🍄 root</h2><p>Your sovereign cloud on nostr. No servers. No bank. No permission.</p><div class="stat"><span class="lbl">🔗 relays</span><span class="val">' + RELAYS.length + '</span></div><div class="stat"><span class="lbl">👤 peers</span><span class="val">' + wsList.length + '</span></div><div class="stat"><span class="lbl">📡 status</span><span class="val" style="color:#22c55e">live on nostr</span></div><div class="stat"><span class="lbl">🔐 key</span><span class="val" style="font-size:0.65rem">' + npub.slice(0,16) + '..</span></div><div class="key-display">' + npub + '</div><div style="margin-top:12px;padding-top:12px;border-top:1px solid #1a1a2e;"><p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px;"><strong>⚡ Pay with Lightning</strong><br/>Send BTC/Lightning to receive CTF or purchase licenses.</p><div style="background:#0a0a0f;border-radius:6px;padding:8px;font-size:0.75rem;font-family:monospace;">pay@eternets.com</div><button class="btn sec" style="margin-top:6px;padding:8px;font-size:0.8rem;" _="on click navigator.clipboard.writeText('pay@eternets.com'); log('⚡ copied!','ok')">📋 Copy LN Address</button></div></div>';
       }
     });
 
@@ -231,10 +231,13 @@
       const plan = document.getElementById('licPlan').value;
       const clientKey = document.getElementById('licKey').value.trim() || npub;
       const prices = { indie: 500, pro: 5000, enterprise: 50000 };
+      const planNames = { indie: 'VOID Indie', pro: 'VOID Pro', enterprise: 'VOID Enterprise' };
+      const price = prices[plan];
       const licenseId = 'void-' + toHex(secp256k1.utils.randomPrivateKey()).slice(0, 12);
-      const ev = await signEvent({ licenseId, plan, clientPubkey: clientKey, price: prices[plan], issuedAt: Date.now() }, K.LICENSE, [['t','void'],['p',clientKey]]);
+      const ev = await signEvent({ licenseId, plan, clientPubkey: clientKey, price, currency: 'USD', lightning: 'pay@eternets.com', issuedAt: Date.now() }, K.LICENSE, [['t','void'],['p',clientKey]]);
       publish(ev);
-      log('🔐 ' + plan.toUpperCase() + ' license — pay ' + prices[plan] + ' CTF', 'ok');
+      log('🔐 ' + planNames[plan] + ' license issued', 'ok');
+      log('   Pay $' + price + ' via Lightning: pay@eternets.com', 'info');
     };
 
     window.sendInquiry = async function() {
