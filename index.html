@@ -1,117 +1,29 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>🍄 root — ËTΞRNETS Cloud</title>
-  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
-  <script src="https://unpkg.com/hyperscript.org@0.9.13"></script>
   <script type="module">
     import { schnorr, secp256k1 } from 'https://esm.sh/@noble/curves@1.6.0/secp256k1';
     window.schnorr = schnorr; window.secp256k1 = secp256k1;
-  </script>
-  <style>
-    :root { --bg: #0a0a0f; --surface: #12121e; --accent: #7c3aed; --text: #e0e0e0; --muted: #666; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
-    .container { max-width: 480px; margin: 0 auto; padding: 16px; flex: 1; }
-    header { text-align: center; padding: 32px 0 12px; }
-    header .logo { font-size: 3rem; }
-    header h1 { font-size: 1.8rem; color: var(--accent); letter-spacing: -1px; }
-    header p { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
-    .bar { background: var(--surface); border-radius: 10px; padding: 10px 14px; margin: 10px 0; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; border: 1px solid #1a1a2e; }
-    .tabs { display: flex; gap: 4px; margin: 10px 0; }
-    .tabs a { flex: 1; padding: 10px; text-align: center; border-radius: 8px; border: 1px solid #2a2a3e; background: var(--surface); color: var(--muted); cursor: pointer; text-decoration: none; font-size: 0.85rem; transition: border .2s; }
-    .tabs a:hover, .tabs a.active { border-color: var(--accent); color: var(--text); }
-    .card { background: var(--surface); border-radius: 12px; padding: 16px; margin: 8px 0; border: 1px solid #1a1a2e; }
-    .card h2 { font-size: 1rem; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-    .card p { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
-    input, select, textarea { width: 100%; background: #0a0a0f; border: 1px solid #2a2a3e; border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 0.9rem; margin: 4px 0; font-family: inherit; }
-    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
-    textarea { min-height: 60px; resize: vertical; }
-    .btn { display: block; width: 100%; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; border: none; cursor: pointer; margin: 6px 0; transition: opacity .2s; }
-    .btn:hover { opacity: .85; }
-    .btn.prim { background: var(--accent); color: white; }
-    .btn.sec { background: #1e293b; color: var(--text); }
-    .flex { display: flex; gap: 6px; }
-    .flex .btn { flex: 1; }
-    .log { background: #0a0a0f; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 0.7rem; max-height: 140px; overflow-y: auto; }
-    .log div { padding: 2px 0; }
-    .ok { color: #22c55e; } .err { color: #ef4444; } .info { color: var(--muted); }
-    .badge { display: inline-block; background: #1a1a2e; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; border: 1px solid #2a2a3e; }
-    .stat { font-size: 0.85rem; margin: 4px 0; }
-    .stat .lbl { color: var(--muted); }
-    .stat .val { font-family: monospace; float: right; }
-    footer { text-align: center; color: var(--muted); font-size: 0.7rem; padding: 20px 0; border-top: 1px solid #1a1a2e; margin-top: auto; }
-    .key-display { font-family: monospace; font-size: 0.7rem; color: var(--muted); word-break: break-all; background: #0a0a0f; padding: 8px; border-radius: 6px; margin-top: 4px; }
-    @media (max-width:400px) { header h1 { font-size: 1.4rem; } .tabs a { font-size: 0.75rem; padding: 8px; } }
-  </style>
-</head>
-<body>
-  <div class="container">
 
-    <!-- HEADER -->
-    <header>
-      <div class="logo">🍄</div>
-      <h1>root</h1>
-      <p>your sovereign cloud on nostr</p>
-      <div style="margin-top:8px;">
-        <span class="badge">📡 nostr</span>
-        <span class="badge">🔐 p2p</span>
-        <span class="badge">🐟 ctf</span>
-      </div>
-    </header>
-
-    <!-- STATUS BAR -->
-    <div class="bar" id="statusBar">
-      <span>👤 <span id="npubDisplay">—</span></span>
-      <span>🐟 <span id="balCtf">0</span></span>
-      <span>🐍 <span id="balHcr">0</span></span>
-      <button class="btn sec" style="padding:4px 10px;font-size:0.7rem;margin:0;width:auto;" _="on click call window.newKey()">🔄</button>
-    </div>
-
-    <!-- TABS (HTMX) -->
-    <div class="tabs">
-      <a href="#" class="active" hx-get="/tab/freepay" hx-target="#tabContent" hx-trigger="click" hx-swap="innerHTML" _="on click add .active to me remove .active from .tabs a">💳 pay</a>
-      <a href="#" hx-get="/tab/license" hx-target="#tabContent" hx-trigger="click" hx-swap="innerHTML" _="on click add .active to me remove .active from .tabs a">🔐 license</a>
-      <a href="#" hx-get="/tab/pqc" hx-target="#tabContent" hx-trigger="click" hx-swap="innerHTML" _="on click add .active to me remove .active from .tabs a">🛡️ pqc</a>
-      <a href="#" hx-get="/tab/about" hx-target="#tabContent" hx-trigger="click" hx-swap="innerHTML" _="on click add .active to me remove .active from .tabs a">ℹ️ about</a>
-    </div>
-
-    <!-- TAB CONTENT (HTMX swapped) -->
-    <div id="tabContent">
-      <!-- FreePay tab (loaded by default) -->
-      <div class="card">
-        <h2>💳 FreePay</h2>
-        <p>Transfer CTF directly P2P via nostr events. Zero fee. Zero server.</p>
-        <input type="text" id="fpTo" placeholder="recipient npub..." />
-        <input type="text" id="fpAmt" placeholder="amount" />
-        <button class="btn prim" _="on click call window.transfer()">📤 send</button>
-        <button class="btn sec" _="on click call window.faucet()">🚰 faucet</button>
-      </div>
-    </div>
-
-    <!-- LOG -->
-    <div class="card" style="padding:8px;">
-      <div class="log" id="log"><div class="info">🍄 root — your sovereign cloud</div></div>
-    </div>
-
-    <footer>🍄 root — ËTΞRNETS · AGPL-3.0 · all on nostr · no servers</footer>
-  </div>
-
-  <script>
-    // ─── Nostr crypto ────────────────────────────────────
+    // ─── Constants ──────────────────────────────────────────
     const RELAYS = ['wss://relay.primal.net', 'wss://nos.lol'];
     const K = { TRANSFER: 30000, LICENSE: 30001, LEAD: 30002, CONFIG: 30004 };
-    // Admin pubkey (the site owner) — verifiable in Nostr
-    // Users can check: nostr key matches events signed by this key
-    const ADMIN_NPUB = 'npub1root'; // placeholder — replace with your npub
-    const ADMIN_PK = ''; // hex pubkey (set via event)
+    // ROOT OF TRUST: only this pubkey can set the lightning address
+    // Generate yours: open console → await window.newKey() → copy npub
+    // Then replace ADMIN_NPUB below and publish kind 30004
+    const ADMIN_NPUB = 'npub1root'; // ← REPLACE with your npub after generating
+    let adminPkHex = ''; // resolved from npub on init
+
     let sk, pk, npub = '';
     let wsList = [];
     let balance = { ctf: 0, hcr: 0 };
-    let lightningAddress = 'pay@eternets.com'; // default, overridden by Nostr event
+    let lightningAddress = 'not set';
+    let adminVerified = false;
 
+    // ─── Crypto utils ────────────────────────────────────────
     function toHex(b) { return Array.from(b).map(x => x.toString(16).padStart(2,'0')).join(''); }
     function fromHex(s) { return new Uint8Array(s.match(/.{2}/g).map(x => parseInt(x,16))); }
 
@@ -122,7 +34,8 @@
       localStorage.setItem('root_sk', toHex(sk));
       localStorage.setItem('root_pk', toHex(pk));
       updateUI();
-      log('🔑 new key: ' + npub.slice(0,16) + '...', 'ok');
+      log('🔑 ' + npub.slice(0,16) + '...', 'ok');
+      return { sk, pk, npub };
     }
 
     function loadKey() {
@@ -131,12 +44,13 @@
       sk = fromHex(s);
       pk = schnorr.getPublicKey(sk);
       npub = 'npub1' + toHex(pk).slice(0, 40);
-      updateUI();
     }
+
+    function toNpub(pkHex) { return 'npub1' + pkHex.slice(0, 40); }
 
     function log(msg, type = 'info') {
       const el = document.getElementById('log');
-      const d = document.createElement('div'); d.className = type;
+      const d = document.createElement('div'); d.className = 'l-' + type;
       d.textContent = msg; el.appendChild(d); el.scrollTop = el.scrollHeight;
     }
 
@@ -146,6 +60,7 @@
       document.getElementById('balHcr').textContent = balance.hcr;
     }
 
+    // ─── Nostr event signing ──────────────────────────────
     async function signEvent(content, kind, tags) {
       const pkHex = toHex(pk);
       const ev = { pubkey: pkHex, created_at: Math.floor(Date.now()/1000), kind, tags: tags||[], content: JSON.stringify(content) };
@@ -160,36 +75,42 @@
       wsList.forEach(ws => { try { ws.send(JSON.stringify(['EVENT', ev])); } catch(_) {} });
     }
 
+    // ─── Nostr relay connection ──────────────────────────
     function connect() {
       RELAYS.forEach(url => {
         try {
           const ws = new WebSocket(url);
           ws.onopen = () => {
             wsList.push(ws);
-            const pkHex = toHex(pk);
             ws.send(JSON.stringify(['REQ', 'bal', { kinds: [K.TRANSFER], '#t': ['freepay'], limit: 50 }]));
-            ws.send(JSON.stringify(['REQ', 'cfg', { kinds: [K.CONFIG], limit: 5 }])); // get admin lightning address
+            ws.send(JSON.stringify(['REQ', 'cfg', { kinds: [K.CONFIG], limit: 5 }]));
             log('🟢 ' + url.replace('wss://',''), 'ok');
           };
           ws.onmessage = e => {
             try {
               const [type, , ev] = JSON.parse(e.data);
-              if (type === 'EVENT' && ev) {
-                try {
-                  const d = JSON.parse(ev.content);
-                  // Check if it's a config event with lightning address
-                  if (ev.kind === K.CONFIG && d.lightning) {
-                    lightningAddress = d.lightning;
-                    log('⚡ Lightning: ' + lightningAddress, 'ok');
-                  }
-                  // Balance from transfers
-                  if (ev.kind === K.TRANSFER) {
-                    if (d.to === toHex(pk)) balance.ctf += Number(d.amount) || 0;
-                    if (d.from === toHex(pk)) balance.ctf -= Number(d.amount) || 0;
-                  }
-                  updateUI();
-                } catch(_) {}
+              if (type !== 'EVENT' || !ev) return;
+              const d = JSON.parse(ev.content);
+
+              // ── Config event: Lightning Address ──────────
+              if (ev.kind === K.CONFIG && d.lightning) {
+                const evPubkeyNpub = toNpub(ev.pubkey);
+                if (evPubkeyNpub === ADMIN_NPUB) {
+                  lightningAddress = d.lightning;
+                  adminVerified = true;
+                  log('⚡ LN Address verified from admin key ✓', 'ok');
+                } else {
+                  log('⚠️  Ignored config from unverified key: ' + evPubkeyNpub.slice(0,12), 'err');
+                }
               }
+
+              // ── Transfer events: balance ──────────────────
+              if (ev.kind === K.TRANSFER) {
+                if (d.to === toHex(pk)) balance.ctf += Number(d.amount) || 0;
+                if (d.from === toHex(pk)) balance.ctf -= Number(d.amount) || 0;
+              }
+
+              updateUI();
             } catch(_) {}
           };
           ws.onerror = () => log('🔴 ' + url.replace('wss://',''), 'err');
@@ -197,88 +118,187 @@
       });
     }
 
-    // ─── FreePay ─────────────────────────────────────────
+    // ─── FreePay ──────────────────────────────────────────
     async function transfer() {
       const to = document.getElementById('fpTo').value.trim();
       const amt = document.getElementById('fpAmt').value.trim();
       if (!to || !amt) { log('fill recipient and amount', 'err'); return; }
       const ev = await signEvent({ from: toHex(pk), to, amount: amt, asset: 'CTF' }, K.TRANSFER, [['t','freepay'],['p',to]]);
-      publish(ev);
-      balance.ctf -= Number(amt);
-      log('📤 ' + amt + ' CTF → ' + to.slice(0,12) + '...', 'ok');
-      updateUI();
+      publish(ev); balance.ctf -= Number(amt);
+      log('📤 ' + amt + ' CTF → ' + to.slice(0,12) + '...', 'ok'); updateUI();
     }
 
     async function faucet() {
       const ev = await signEvent({ to: toHex(pk), amount: '1000', asset: 'CTF' }, K.TRANSFER, [['t','freepay'],['p',toHex(pk)]]);
-      publish(ev);
-      balance.ctf += 1000;
-      log('🚰 1000 CTF', 'ok');
-      updateUI();
+      publish(ev); balance.ctf += 1000;
+      log('🚰 1000 CTF', 'ok'); updateUI();
     }
 
-    // ─── HTMX tab handlers ──────────────────────────────
-    document.body.addEventListener('htmx:configRequest', (e) => {
-      // Intercept HTMX requests and serve tab content locally
-      const path = e.detail.path;
-      if (path === '/tab/freepay') {
-        e.preventDefault();
-        document.getElementById('tabContent').innerHTML =
-          '<div class="card"><h2>💳 FreePay</h2><p>Transfer CTF P2P via nostr events.</p><input type="text" id="fpTo" placeholder="recipient npub..." /><input type="text" id="fpAmt" placeholder="amount" /><button class="btn prim" _="on click call window.transfer()">📤 send</button><button class="btn sec" _="on click call window.faucet()">🚰 faucet</button></div>';
-      } else if (path === '/tab/license') {
-        e.preventDefault();
-        document.getElementById('tabContent').innerHTML =
-          '<div class="card"><h2>🔐 VOID License</h2><p>AGPL → MIT. Pay with Bitcoin Lightning. Receive license as Nostr event.</p><select id="licPlan" _="on change set #lnPrice.textContent to event.target.value == 'indie' ? '$1,000' : event.target.value == 'pro' ? '$5,000' : '$100,000'"><option value="indie">VOID Indie — $1,000/yr</option><option value="pro">VOID Pro — $5,000/yr</option><option value="enterprise">VOID Enterprise — $100,000/yr</option></select><div style="background:#0a0a0f;border-radius:8px;padding:12px;margin:8px 0;text-align:center;"><div style="font-size:0.8rem;color:var(--muted);margin-bottom:4px;">⚡ Pay with Lightning</div><div style="font-size:1.2rem;font-weight:700;color:#f59e0b;" id="lnPrice">$1,000</div><div style="font-size:0.7rem;color:var(--muted);margin:4px 0;">Lightning Address: <strong style="color:var(--accent);" id="lnAddrDisplay">' + lightningAddress + '</strong></div><button class="btn sec" style="margin:4px 0;padding:8px;font-size:0.8rem;" _="on click navigator.clipboard.writeText(document.getElementById('lnAddrDisplay').textContent); log('⚡ Address copied!','ok')">📋 Copy</button></div><input type="text" id="licKey" placeholder="your npub (for license event)" /><div style="font-size:0.75rem;color:var(--muted);margin:6px 0;">After payment, enter your npub and click generate. License event sent to your pubkey.</div><button class="btn prim" _="on click call window.buyLicense()">🔐 generate license</button></div>';
-      } else if (path === '/tab/pqc') {
-        e.preventDefault();
-        document.getElementById('tabContent').innerHTML =
-          '<div class="card"><h2>🛡️ PQC Shield</h2><p>Post-quantum migration. NIST FIPS 203/204.</p><div class="stat"><span class="lbl">🔍 Audit</span><span class="val">$10,000</span></div><div class="stat"><span class="lbl">⚡ Implementation</span><span class="val">$25,000</span></div><div class="stat"><span class="lbl">🏢 Enterprise (yearly)</span><span class="val">$200,000</span></div><div style="margin-top:12px;"><textarea id="pqcMsg" placeholder="what do you need?"></textarea><button class="btn prim" _="on click call window.sendInquiry()">📩 send inquiry via nostr</button></div></div>';
-      } else if (path === '/tab/about') {
-        e.preventDefault();
-        document.getElementById('tabContent').innerHTML =
-          '<div class="card"><h2>🍄 root</h2><p>Your sovereign cloud on nostr. No servers. No bank. No permission.</p><div class="stat"><span class="lbl">🔗 relays</span><span class="val">' + RELAYS.length + '</span></div><div class="stat"><span class="lbl">📡 status</span><span class="val" style="color:#22c55e">live on nostr</span></div><div class="stat"><span class="lbl">🔐 your key</span><span class="val" style="font-size:0.65rem">' + npub.slice(0,16) + '..</span></div><div class="key-display">' + npub + '</div><div style="margin-top:12px;padding-top:12px;border-top:1px solid #1a1a2e;"><p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px;"><strong>⚡ Payments</strong><br/>Lightning Address loaded from Nostr event kind 30004.<br/>Only the admin key can update it. Anyone can verify.</p><div style="background:#0a0a0f;border-radius:6px;padding:8px;font-size:0.75rem;font-family:monospace;word-break:break-all;">' + lightningAddress + '</div><button class="btn sec" style="margin-top:6px;padding:8px;font-size:0.8rem;" _="on click navigator.clipboard.writeText(\'' + lightningAddress + '\'); log('⚡ copied!','ok')">📋 Copy</button><button class="btn sec" style="margin-top:4px;padding:8px;font-size:0.8rem;" _="on click call window.setLightning()">⚙️ Update (admin only)</button><p style="font-size:0.7rem;color:var(--muted);margin-top:8px;">Admin: ' + ADMIN_NPUB + '<br/>Publish kind 30004 from admin key to change.</p></div></div>';
-      }
-    });
-
-    // ─── License ─────────────────────────────────────────
-    window.buyLicense = async function() {
+    // ─── License ──────────────────────────────────────────
+    async function buyLicense() {
       const plan = document.getElementById('licPlan').value;
       const clientKey = document.getElementById('licKey').value.trim() || npub;
       const prices = { indie: 1000, pro: 5000, enterprise: 100000 };
-      const planNames = { indie: 'VOID Indie', pro: 'VOID Pro', enterprise: 'VOID Enterprise' };
+      const names = { indie: 'VOID Indie', pro: 'VOID Pro', enterprise: 'VOID Enterprise' };
       const price = prices[plan];
-      const licenseId = 'void-' + toHex(secp256k1.utils.randomPrivateKey()).slice(0, 12);
-      const ev = await signEvent({ licenseId, plan, clientPubkey: clientKey, price, currency: 'USD', lightning: lightningAddress, issuedAt: Date.now() }, K.LICENSE, [['t','void'],['p',clientKey]]);
+      if (!adminVerified) { log('⚠️  Admin LN not verified. Contact admin directly.', 'err'); return; }
+      const id = 'void-' + toHex(secp256k1.utils.randomPrivateKey()).slice(0, 12);
+      const ev = await signEvent({ licenseId: id, plan, clientPubkey: clientKey, price, currency: 'USD', lightning: lightningAddress, issuedAt: Date.now() }, K.LICENSE, [['t','void'],['p',clientKey]]);
       publish(ev);
-      log('🔐 ' + planNames[plan] + ' license issued', 'ok');
-      log('   Pay $' + price + ' via Lightning: ' + lightningAddress, 'info');
-    };
+      log('🔐 ' + names[plan] + ' — pay $' + price, 'ok');
+      log('   ⚡ ' + lightningAddress, 'info');
+    }
 
-    window.setLightning = async function() {
-      const addr = prompt('Enter new Lightning Address:');
+    async function sendInquiry() {
+      const msg = document.getElementById('pqcMsg').value.trim() || 'PQC inquiry';
+      const ev = await signEvent({ message: msg, from: npub }, K.LEAD, [['t','pqc']]);
+      publish(ev); log('📩 inquiry sent', 'ok');
+    }
+
+    // ─── Admin: set Lightning Address ─────────────────────
+    async function setLightning() {
+      if (adminVerified && !confirm('Update Lightning Address? Only admin key can do this.')) return;
+      const addr = prompt('Enter Lightning Address:');
       if (!addr) return;
       const ev = await signEvent({ lightning: addr, updatedAt: Date.now() }, K.CONFIG, [['t','config']]);
       publish(ev);
+      // This device trusts itself, but other devices will verify against ADMIN_NPUB
       lightningAddress = addr;
-      log('⚡ Lightning Address updated: ' + addr, 'ok');
+      adminVerified = true;
+      log('⚡ Published. Other clients will verify against ADMIN_NPUB.', 'ok');
+    }
+
+    // ─── Tab switching (pure JS, no server needed) ──────
+    const TABS = {
+      pay: `<div class="card"><h2>💳 FreePay</h2><p>Transfer CTF P2P via nostr events. Balance computed from event history.</p>
+        <input type="text" id="fpTo" placeholder="recipient npub..." />
+        <input type="text" id="fpAmt" placeholder="amount" />
+        <button class="btn prim" onclick="window.transfer()">📤 send</button>
+        <button class="btn sec" onclick="window.faucet()">🚰 faucet</button></div>`,
+
+      license: `<div class="card"><h2>🔐 VOID License</h2><p>AGPL → MIT. Pay with Bitcoin Lightning.</p>
+        <select id="licPlan">
+          <option value="indie">VOID Indie — $1,000/yr</option>
+          <option value="pro">VOID Pro — $5,000/yr</option>
+          <option value="enterprise">VOID Enterprise — $100,000/yr</option>
+        </select>
+        <div style="background:#0a0a0f;border-radius:8px;padding:12px;margin:8px 0;text-align:center;">
+          <div style="font-size:0.8rem;color:var(--muted);margin-bottom:4px;">⚡ Pay with Lightning</div>
+          <div style="font-size:0.7rem;color:var(--muted);" id="lnStatus">${adminVerified ? '✅ Admin verified: <strong>' + lightningAddress + '</strong>' : '⏳ Waiting for admin config from Nostr...'}</div>
+          <button class="btn sec" style="margin:4px 0;padding:8px;font-size:0.8rem;" onclick="navigator.clipboard.writeText('${lightningAddress}')">📋 Copy</button>
+        </div>
+        <input type="text" id="licKey" placeholder="your npub (license will be sent here)" />
+        <button class="btn prim" onclick="window.buyLicense()">🔐 generate license</button></div>`,
+
+      pqc: `<div class="card"><h2>🛡️ PQC Shield</h2><p>Post-quantum migration. NIST FIPS 203/204.</p>
+        <div class="stat"><span class="lbl">🔍 Audit</span><span class="val">$10,000</span></div>
+        <div class="stat"><span class="lbl">⚡ Implementation</span><span class="val">$25,000</span></div>
+        <div class="stat"><span class="lbl">🏢 Enterprise</span><span class="val">$200,000/yr</span></div>
+        <textarea id="pqcMsg" rows="3" placeholder="Describe your needs..."></textarea>
+        <button class="btn prim" onclick="window.sendInquiry()">📩 send inquiry</button></div>`,
+
+      about: `<div class="card"><h2>🍄 root</h2><p>Your sovereign cloud on nostr. No servers. No bank.</p>
+        <div class="stat"><span class="lbl">🔗 relays</span><span class="val">${RELAYS.length}</span></div>
+        <div class="stat"><span class="lbl">📡 status</span><span class="val" style="color:#22c55e">live on nostr</span></div>
+        <div class="stat"><span class="lbl">🔐 your key</span><span class="val" style="font-size:0.65rem">${npub.slice(0,16)}..</span></div>
+        <div class="key-display">${npub}</div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid #1a1a2e;">
+          <p style="font-size:0.8rem;color:var(--muted);margin-bottom:4px;"><strong>⚡ Lightning</strong>
+          <span style="font-size:0.75rem;" id="aboutLnStatus">${adminVerified ? '✅ ' + lightningAddress : '⏳ loading from nostr...'}</span></p>
+          <p style="font-size:0.7rem;color:var(--muted);">Admin npub: <strong>${ADMIN_NPUB}</strong><br/>
+          Only kind 30004 signed by admin pubkey is accepted.</p>
+          <button class="btn sec" style="margin-top:6px;padding:8px;font-size:0.8rem;" onclick="navigator.clipboard.writeText('${lightningAddress}')">📋 Copy</button>
+          <button class="btn sec" style="margin-top:4px;padding:8px;font-size:0.8rem;" onclick="window.setLightning()">⚙️ Set LN Address</button>
+        </div></div>`
     };
 
-    window.sendInquiry = async function() {
-      const msg = document.getElementById('pqcMsg').value.trim() || 'PQC inquiry';
-      const ev = await signEvent({ message: msg, from: npub }, K.LEAD, [['t','pqc']]);
-      publish(ev);
-      log('📩 inquiry sent via nostr', 'ok');
-    };
+    function showTab(name) {
+      document.getElementById('tabContent').innerHTML = TABS[name] || TABS.pay;
+      document.querySelectorAll('.tabs a').forEach(a => a.classList.remove('active'));
+      const tabBtn = document.querySelector(`.tabs a[data-tab="${name}"]`);
+      if (tabBtn) tabBtn.classList.add('active');
+    }
 
-    // ─── Init ────────────────────────────────────────────
-    window.newKey = newKey;
-    window.transfer = transfer;
-    window.faucet = faucet;
-    window.buyLicense = buyLicense;
-    window.sendInquiry = sendInquiry;
-    window.setLightning = setLightning;
+    // Expose to window for onclick handlers
+    window.newKey = newKey; window.transfer = transfer; window.faucet = faucet;
+    window.buyLicense = buyLicense; window.sendInquiry = sendInquiry;
+    window.setLightning = setLightning; window.showTab = showTab;
+
+    // ─── Init ──────────────────────────────────────────────
     loadKey();
+    showTab('pay');
     connect();
+    log('🍄 root loaded');
+    log('🔑 ' + npub.slice(0,16) + '...', 'ok');
   </script>
+  <style>
+    :root { --bg: #0a0a0f; --surface: #12121e; --accent: #7c3aed; --text: #e0e0e0; --muted: #666; --err: #ef4444; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; min-height: 100vh; }
+    .container { max-width: 480px; margin: 0 auto; padding: 16px; flex: 1; width: 100%; }
+    header { text-align: center; padding: 24px 0 8px; }
+    header h1 { font-size: 1.6rem; color: var(--accent); }
+    header p { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+    .bar { background: var(--surface); border-radius: 10px; padding: 10px 14px; margin: 8px 0; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; border: 1px solid #1a1a2e; }
+    .tabs { display: flex; gap: 4px; margin: 8px 0; }
+    .tabs a { flex: 1; padding: 10px; text-align: center; border-radius: 8px; border: 1px solid #2a2a3e; background: var(--surface); color: var(--muted); cursor: pointer; text-decoration: none; font-size: 0.8rem; transition: all .2s; }
+    .tabs a:hover { border-color: var(--accent); color: var(--text); }
+    .tabs a.active { border-color: var(--accent); color: var(--accent); background: #1a1a2e; }
+    .card { background: var(--surface); border-radius: 12px; padding: 16px; margin: 8px 0; border: 1px solid #1a1a2e; }
+    .card h2 { font-size: 1rem; margin-bottom: 8px; }
+    .card p { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+    input, select, textarea { width: 100%; background: #0a0a0f; border: 1px solid #2a2a3e; border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 0.9rem; margin: 4px 0; font-family: inherit; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 50px; }
+    .btn { display: block; width: 100%; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; border: none; cursor: pointer; margin: 6px 0; transition: opacity .2s; }
+    .btn:hover { opacity: .85; }
+    .btn.prim { background: var(--accent); color: white; }
+    .btn.sec { background: #1e293b; color: var(--text); }
+    .stat { font-size: 0.85rem; padding: 4px 0; }
+    .stat .lbl { color: var(--muted); }
+    .stat .val { font-family: monospace; float: right; }
+    .key-display { font-family: monospace; font-size: 0.7rem; color: var(--muted); word-break: break-all; background: #0a0a0f; padding: 8px; border-radius: 6px; margin-top: 4px; }
+    .log { background: #0a0a0f; border-radius: 8px; padding: 8px; font-family: monospace; font-size: 0.65rem; max-height: 120px; overflow-y: auto; }
+    .log .l-ok { color: #22c55e; padding: 1px 0; }
+    .log .l-err { color: var(--err); padding: 1px 0; }
+    .log .l-info { color: var(--muted); padding: 1px 0; }
+    footer { text-align: center; color: var(--muted); font-size: 0.65rem; padding: 16px 0; border-top: 1px solid #1a1a2e; margin-top: auto; }
+    .badge { display: inline-block; background: #1a1a2e; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; border: 1px solid #2a2a3e; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🍄 root</h1>
+      <p>sovereign cloud on nostr</p>
+      <div style="margin-top:6px;">
+        <span class="badge">📡 nostr</span>
+        <span class="badge">🔐 p2p</span>
+        <span class="badge">🐟 ctf</span>
+      </div>
+    </header>
+
+    <div class="bar">
+      <span>👤 <span id="npubDisplay">—</span></span>
+      <span>🐟 <span id="balCtf">0</span></span>
+      <span>🐍 <span id="balHcr">0</span></span>
+      <button class="btn sec" style="padding:4px 10px;font-size:0.65rem;margin:0;width:auto;" onclick="window.newKey()">🔄</button>
+    </div>
+
+    <div class="tabs">
+      <a href="#" data-tab="pay" class="active" onclick="event.preventDefault();window.showTab('pay')">💳 pay</a>
+      <a href="#" data-tab="license" onclick="event.preventDefault();window.showTab('license')">🔐 license</a>
+      <a href="#" data-tab="pqc" onclick="event.preventDefault();window.showTab('pqc')">🛡️ pqc</a>
+      <a href="#" data-tab="about" onclick="event.preventDefault();window.showTab('about')">ℹ️ about</a>
+    </div>
+
+    <div id="tabContent"></div>
+
+    <div class="card" style="padding:6px;">
+      <div class="log" id="log"></div>
+    </div>
+
+    <footer>🍄 root — ËTΞRNETS · AGPL-3.0 · all on nostr</footer>
+  </div>
 </body>
 </html>
